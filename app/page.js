@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 
 const MS = ['Running', 'Stop', 'Alarm', 'Maintenance'];
 const AS = ['Open', 'In Progress', 'Closed'];
-const XS = ['Planned', 'In Progress', 'Done'];
+const XS = ['Planned', 'In Progress', 'Waiting Part', 'Done'];
 const inp = 'border rounded px-2 py-1 w-full';
 const btn = 'px-3 py-1 rounded bg-slate-800 text-white text-sm';
 
@@ -29,10 +29,43 @@ function Login() {
     </div>);
 }
 
+function Rows({ t, e }) {
+  const mx = Math.max(1, ...e.map((x) => x[1]));
+  return (<div className="bg-white rounded p-4 shadow"><h3 className="font-semibold mb-2">{t}</h3>
+    {e.length ? e.map(([k, v]) => (<div key={k} className="flex items-center gap-2 text-sm mb-1"><span className="w-24 truncate">{k}</span>
+      <div className="bg-slate-800 h-3 rounded" style={{ width: `${(v / mx) * 100}px` }} /><span>{v}</span></div>)) : <p className="text-sm text-slate-500">ไม่มีข้อมูล</p>}</div>);
+}
+
+function History({ m, onClose }) {
+  const [a, setA] = useState([]), [x, setX] = useState([]);
+  useEffect(() => { (async () => {
+    setA((await supabase.from('alarms').select('*').eq('machine_ref', m.id).order('occurred_at', { ascending: false })).data || []);
+    setX((await supabase.from('maintenance_records').select('*').eq('machine_ref', m.id).order('maint_date', { ascending: false })).data || []);
+  })(); }, [m.id]);
+  return (<div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded p-5 w-full max-w-2xl max-h-full overflow-auto space-y-2">
+    <h2 className="font-bold">History: {m.machine_id} - {m.name}</h2>
+    <h3 className="font-semibold text-sm">Alarms ({a.length})</h3>
+    {a.map((r) => <div key={r.id} className="text-sm border-b py-1">{(r.occurred_at || '').slice(0, 16).replace('T', ' ')} | {r.alarm_code} | {r.description} | {r.status}</div>)}
+    <h3 className="font-semibold text-sm pt-2">Maintenance ({x.length})</h3>
+    {x.map((r) => <div key={r.id} className="text-sm border-b py-1">{r.maint_date} | {r.maintenance_type} | {r.problem} | {r.technician} | {r.status}</div>)}
+    <button className={btn} onClick={onClose}>Close</button></div></div>);
+}
+
+function Audit() {
+  const [r, setR] = useState([]);
+  useEffect(() => { supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(100).then(({ data }) => setR(data || [])); }, []);
+  return (<div className="bg-white rounded shadow overflow-x-auto"><table className="w-full text-sm">
+    <thead className="bg-slate-200"><tr>{['Time', 'User', 'Table', 'Action', 'Detail'].map((h) => <th key={h} className="p-2 text-left">{h}</th>)}</tr></thead>
+    <tbody>{r.map((x) => (<tr key={x.id} className="border-t"><td className="p-2 whitespace-nowrap">{x.created_at.slice(0, 19).replace('T', ' ')}</td>
+      <td className="p-2">{x.changed_by_email}</td><td className="p-2">{x.table_name}</td><td className="p-2">{x.action}</td>
+      <td className="p-2">{JSON.stringify(x.detail).slice(0, 90)}</td></tr>))}
+      {!r.length && <tr><td className="p-4 text-slate-500" colSpan={5}>ยังไม่มีบันทึก</td></tr>}</tbody></table></div>);
+}
+
 function Dash() {
   const [d, setD] = useState(null);
   useEffect(() => { (async () => {
-    const r = await Promise.all(['machines', 'alarms', 'maintenance_records'].map((t) => supabase.from(t).select('status')));
+    const r = await Promise.all(['machines', 'alarms', 'maintenance_records'].map((t) => supabase.from(t).select(t === 'alarms' ? 'status,occurred_at,machines(machine_id)' : 'status')));
     setD(r.map((x) => x.data || []));
   })(); }, []);
   if (!d) return <p>Loading...</p>;
@@ -49,10 +82,14 @@ function Dash() {
       <Card t="Maintenance jobs" n={d[2].length} />
     </div>
     <div className="grid md:grid-cols-2 gap-3"><Bars t="Alarms by status" arr={d[1]} keys={AS} /><Bars t="Maintenance by status" arr={d[2]} keys={XS} /></div>
+    <div className="grid md:grid-cols-2 gap-3">
+      <Rows t="Alarms by machine" e={Object.entries(d[1].reduce((o, a) => { const k = a.machines?.machine_id || '?'; o[k] = (o[k] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6)} />
+      <Rows t="Alarms last 7 days" e={[...Array(7)].map((_, i) => { const t = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return [t.slice(5), d[1].filter((a) => (a.occurred_at || '').slice(0, 10) === t).length]; })} />
+    </div>
   </div>);
 }
 
-function Crud({ table, select = '*', fields, statuses, role, add, edit, del, refs = [], defaults = {} }) {
+function Crud({ table, select = '*', fields, statuses, role, add, edit, del, refs = [], defaults = {}, extra }) {
   const [rows, setRows] = useState([]), [q, setQ] = useState(''), [st, setSt] = useState('');
   const [form, setForm] = useState(null), [err, setErr] = useState(''), [df, setDf] = useState(''), [dt, setDt] = useState('');
   const load = useCallback(async () => {
@@ -104,7 +141,7 @@ function Crud({ table, select = '*', fields, statuses, role, add, edit, del, ref
       <thead className="bg-slate-200"><tr>{fields.map((f) => <th key={f.k} className="p-2 text-left">{f.label}</th>)}<th /></tr></thead>
       <tbody>{view.map((r) => (<tr key={r.id} className="border-t">
         {fields.map((f) => <td key={f.k} className="p-2">{String(val(r, f) ?? '')}</td>)}
-        <td className="p-2 whitespace-nowrap">{edit && <button className="mr-2 underline" onClick={() => setForm(r)}>Edit</button>}
+        <td className="p-2 whitespace-nowrap">{extra && extra(r)}{edit && <button className="mr-2 underline" onClick={() => setForm(r)}>Edit</button>}
           {del && <button className="text-red-600 underline" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}
         {!view.length && <tr><td className="p-4 text-slate-500" colSpan={fields.length + 1}>ไม่พบข้อมูล</td></tr>}</tbody></table></div>
     {form && (<div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded p-5 w-full max-w-md space-y-2 max-h-full overflow-auto">
@@ -116,7 +153,7 @@ function Crud({ table, select = '*', fields, statuses, role, add, edit, del, ref
 }
 
 export default function Home() {
-  const [ses, setSes] = useState(undefined), [prof, setProf] = useState(null), [tab, setTab] = useState('Dashboard'), [machines, setMachines] = useState([]);
+  const [ses, setSes] = useState(undefined), [prof, setProf] = useState(null), [tab, setTab] = useState('Dashboard'), [machines, setMachines] = useState([]), [hist, setHist] = useState(null), [openN, setOpenN] = useState(0), [dark, setDark] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSes(data.session));
     const { data } = supabase.auth.onAuthStateChange((_e, s) => setSes(s));
@@ -126,10 +163,13 @@ export default function Home() {
     if (!ses) return setProf(null);
     supabase.from('profiles').select('*').eq('id', ses.user.id).single().then(({ data }) => setProf(data));
     supabase.from('machines').select('id,machine_id,name').then(({ data }) => setMachines(data || []));
+    supabase.from('alarms').select('id', { count: 'exact', head: true }).eq('status', 'Open').then(({ count }) => setOpenN(count || 0));
   }, [ses, tab]);
+  useEffect(() => { try { const d = localStorage.getItem('dark') === '1'; setDark(d); document.documentElement.classList.toggle('dark', d); } catch (e) {} }, []);
+  const flip = () => { const d = !dark; setDark(d); document.documentElement.classList.toggle('dark', d); try { localStorage.setItem('dark', d ? '1' : '0'); } catch (e) {} };
   if (ses === undefined) return <p className="p-6">Loading...</p>;
   if (!ses) return <Login />;
-  const role = prof?.role || 'technician', admin = role === 'admin';
+  const role = prof?.role || 'viewer', admin = role === 'admin', tech = role !== 'viewer';
   const mref = { k: 'machine_ref', label: 'Machine', type: 'ref', req: true, adminOnly: true, show: 1 };
   const F = {
     Machines: [
@@ -149,13 +189,16 @@ export default function Home() {
   const now = new Date().toISOString().slice(0, 16);
   const body = {
     Dashboard: <Dash />,
-    Machines: <Crud key="m" table="machines" fields={F.Machines} statuses={MS} role={role} add={admin} edit={admin} del={admin} defaults={{ status: 'Stop' }} />,
-    Alarms: <Crud key="a" table="alarms" select="*, machines(machine_id)" fields={F.Alarms} statuses={AS} role={role} refs={machines} add={admin} edit del={admin} defaults={{ status: 'Open', occurred_at: now }} />,
-    Maintenance: <Crud key="x" table="maintenance_records" select="*, machines(machine_id)" fields={F.Maintenance} statuses={XS} role={role} refs={machines} add edit del={admin} defaults={{ status: 'Planned', technician: prof?.full_name || '', maint_date: now.slice(0, 10) }} />,
+    Machines: <Crud key="m" table="machines" fields={F.Machines} statuses={MS} role={role} add={admin} edit={admin} del={admin} defaults={{ status: 'Stop' }} extra={(r) => <button className="mr-2 underline" onClick={() => setHist(r)}>History</button>} />,
+    Alarms: <Crud key="a" table="alarms" select="*, machines(machine_id)" fields={F.Alarms} statuses={AS} role={role} refs={machines} add={admin} edit={tech} del={admin} defaults={{ status: 'Open', occurred_at: now }} />,
+    Maintenance: <Crud key="x" table="maintenance_records" select="*, machines(machine_id)" fields={F.Maintenance} statuses={XS} role={role} refs={machines} add={tech} edit={tech} del={admin} defaults={{ status: 'Planned', technician: prof?.full_name || '', maint_date: now.slice(0, 10) }} />,
   };
   return (<div className="max-w-6xl mx-auto p-4 space-y-4">
     <header className="flex flex-wrap items-center gap-2 justify-between">
-      <nav className="flex gap-1">{Object.keys(body).map((t) => (<button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded text-sm ${tab === t ? 'bg-slate-800 text-white' : 'bg-white'}`}>{t}</button>))}</nav>
-      <div className="text-sm">{ses.user.email} <span className="px-2 py-0.5 rounded bg-slate-200">{role}</span> <button className="underline ml-2" onClick={() => supabase.auth.signOut()}>Logout</button></div>
-    </header>{body[tab]}</div>);
+      <nav className="flex flex-wrap gap-1">{[...Object.keys(body), ...(admin ? ['Audit'] : [])].map((t) => (<button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded text-sm ${tab === t ? 'bg-slate-800 text-white' : 'bg-white'}`}>{t}</button>))}</nav>
+      <div className="text-sm">{ses.user.email} <span className="px-2 py-0.5 rounded bg-slate-200">{role}</span> <button className="underline ml-2" onClick={flip}>{dark ? 'Light' : 'Dark'}</button> <button className="underline ml-2" onClick={() => supabase.auth.signOut()}>Logout</button></div>
+    </header>
+    {openN > 0 && <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-sm">แจ้งเตือน: มี Alarm ที่ยังเปิดอยู่ {openN} รายการ</div>}
+    {tab === 'Audit' ? <Audit /> : body[tab]}
+    {hist && <History m={hist} onClose={() => setHist(null)} />}</div>);
 }
