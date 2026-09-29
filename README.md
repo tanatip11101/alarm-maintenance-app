@@ -1,7 +1,7 @@
 # Alarm & Maintenance Management System
 ระบบบันทึกและติดตาม Alarm / งานซ่อมบำรุงเครื่องจักรในโรงงาน (Programming in Automation Systems)
 
-**Vercel URL:** _(ใส่ URL หลัง Deploy)_
+**Vercel URL:** https://alarm-maintenance-app.vercel.app
 
 ## Function หลัก
 - Login/Logout (Supabase Auth) และ Role: Admin, Technician (คุมสิทธิ์ด้วย RLS)
