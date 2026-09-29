@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+.dark body{background:#0f172a;color:#e2e8f0}
+.dark .bg-white{background:#1e293b}
+.dark .bg-slate-200{background:#334155}
+.dark .bg-slate-800{background:#3b82f6}
+.dark .text-slate-500{color:#94a3b8}
+.dark input,.dark select{background:#0f172a;color:#e2e8f0;border-color:#475569}
