@@ -39,3 +39,4 @@ td button.text-red-600{font-weight:500}
 button:disabled{opacity:.6;cursor:not-allowed}
 .vbar{transition:height .4s ease}
 .vbar:hover{opacity:.85}
+html.dark body{background:var(--bg);color:var(--text)}
