@@ -14,6 +14,19 @@
 |---|---|
 | Admin | จัดการทุกตาราง |
 | Technician | ดูเครื่อง, เพิ่ม/แก้ Maintenance, เปลี่ยนสถานะ Alarm, ดู Dashboard |
+| Viewer | ดูข้อมูลและ Dashboard ได้อย่างเดียว (แก้ไขไม่ได้) |
+
+## ฟีเจอร์พิเศษ (Bonus)
+- **Role Viewer:** ดูข้อมูลได้อย่างเดียว ฐานข้อมูลบล็อกการเขียนด้วย RLS
+- **Machine History:** ปุ่ม History ในหน้า Machines แสดง Alarm และ Maintenance ทั้งหมดของเครื่อง
+- **Audit Log:** บันทึกการเพิ่ม/แก้/ลบทุกตารางอัตโนมัติด้วย trigger (Admin ดูได้ที่แท็บ Audit)
+- **กราฟ Alarm:** Alarm ตามเครื่อง และ Alarm ย้อนหลัง 7 วัน ใน Dashboard
+- **Notification:** แบนเนอร์แจ้งจำนวน Alarm ที่ยังเปิดอยู่
+- **Responsive UI / Dark Mode:** ปุ่มสลับธีมมุมขวาบน
+- **Export CSV** และ **Filter ตามช่วงวันที่**
+- **Change Request:** เพิ่มสถานะ Waiting Part ใน Maintenance
+
+ไฟล์ SQL ของฟีเจอร์เหล่านี้คือ `supabase/bonus.sql` (รันต่อจาก `schema.sql`)
 
 ## Tech
 Next.js 14, Tailwind CSS, Supabase, GitHub Actions, Vercel
@@ -25,7 +38,7 @@ Next.js 14, Tailwind CSS, Supabase, GitHub Actions, Vercel
 SQL อยู่ที่ `supabase/schema.sql`
 
 ## ติดตั้ง
-1. สร้างโปรเจกต์ Supabase แล้วรัน `supabase/schema.sql` ใน SQL Editor
+1. สร้างโปรเจกต์ Supabase แล้วรัน `supabase/schema.sql` ใน SQL Editor แล้วรัน supabase/bonus.sql ต่อ
 2. `cp .env.example .env.local` แล้วใส่ URL และ anon key
 3. `npm install && npm run dev`
 4. สมัครผู้ใช้ แล้วตั้ง Admin: `update profiles set role='admin' where full_name='อีเมล';`
