@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
- 
+
 const MS = ['Running', 'Stop', 'Alarm', 'Maintenance'];
 const AS = ['Open', 'In Progress', 'Closed'];
 const XS = ['Planned', 'In Progress', 'Waiting Part', 'Done'];
@@ -10,22 +10,44 @@ const btn = 'px-4 py-2 rounded bg-slate-800 text-white text-sm font-medium';
 const TONE = { Running: 'green', Stop: 'gray', Alarm: 'red', Maintenance: 'amber', Open: 'red', 'In Progress': 'amber', Closed: 'green', Planned: 'blue', 'Waiting Part': 'orange', Done: 'green', admin: 'blue', technician: 'green', viewer: 'gray' };
 const COL = { Running: '#16a34a', Stop: '#64748b', Alarm: '#dc2626', Maintenance: '#d97706' };
 const Badge = ({ s }) => <span className={`badge b-${TONE[s] || 'gray'}`}>{s}</span>;
- 
+
+function NewPassword({ onDone }) {
+  const [p, setP] = useState(''), [p2, setP2] = useState(''), [m, setM] = useState(''), [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (p.length < 6) return setM('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+    if (p !== p2) return setM('รหัสผ่านสองช่องไม่ตรงกัน');
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: p });
+    setBusy(false);
+    if (error) return setM(error.message);
+    onDone();
+  };
+  return (<div className="min-h-screen flex items-center justify-center p-6"><div className="w-full max-w-sm bg-white rounded shadow p-8 space-y-4">
+    <div><h2 className="text-2xl font-bold">ตั้งรหัสผ่านใหม่</h2><p className="text-sm text-slate-500">กรอกรหัสผ่านใหม่ที่ต้องการใช้</p></div>
+    <label className="block text-sm font-medium">รหัสผ่านใหม่<input className={inp + ' mt-1'} type="password" value={p} onChange={(x) => setP(x.target.value)} /></label>
+    <label className="block text-sm font-medium">ยืนยันรหัสผ่านใหม่<input className={inp + ' mt-1'} type="password" value={p2} onChange={(x) => setP2(x.target.value)} onKeyDown={(k) => k.key === 'Enter' && go()} /></label>
+    {m && <p className="text-sm rounded px-3 py-2 bg-red-100 text-red-800">{m}</p>}
+    <button className={btn + ' w-full'} disabled={busy} onClick={go}>{busy ? 'กำลังบันทึก...' : 'บันทึกรหัสผ่านใหม่'}</button></div></div>);
+}
+
 function Login() {
   const [mode, setMode] = useState('in'), [e, setE] = useState(''), [p, setP] = useState(''), [p2, setP2] = useState('');
   const [show, setShow] = useState(false), [busy, setBusy] = useState(false), [m, setM] = useState(null);
-  const up = mode === 'up';
+  const up = mode === 'up', rs = mode === 'reset';
   const go = async () => {
     setM(null);
-    if (!e || !p) return setM({ t: 'err', s: 'กรุณากรอกอีเมลและรหัสผ่าน' });
+    if (!e || (!rs && !p)) return setM({ t: 'err', s: rs ? 'กรุณากรอกอีเมล' : 'กรุณากรอกอีเมลและรหัสผ่าน' });
     if (!/^\S+@\S+\.\S+$/.test(e)) return setM({ t: 'err', s: 'รูปแบบอีเมลไม่ถูกต้อง' });
     if (up && p.length < 6) return setM({ t: 'err', s: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
     if (up && p !== p2) return setM({ t: 'err', s: 'รหัสผ่านสองช่องไม่ตรงกัน' });
     setBusy(true);
     const a = { email: e, password: p };
-    const { error } = up ? await supabase.auth.signUp(a) : await supabase.auth.signInWithPassword(a);
+    let error;
+    if (rs) ({ error } = await supabase.auth.resetPasswordForEmail(e, { redirectTo: window.location.origin }));
+    else ({ error } = up ? await supabase.auth.signUp(a) : await supabase.auth.signInWithPassword(a));
     setBusy(false);
-    if (error) setM({ t: 'err', s: error.message.includes('Invalid login') ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' : error.message });
+    if (error) setM({ t: 'err', s: error.message.includes('Invalid login') ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' : /rate limit/i.test(error.message) ? 'ส่งอีเมลบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่' : error.message });
+    else if (rs) setM({ t: 'ok', s: 'ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่อีเมลแล้ว โปรดตรวจสอบกล่องจดหมาย (รวมถึงสแปม)' });
     else if (up) setM({ t: 'ok', s: 'สมัครสำเร็จ กำลังเข้าสู่ระบบ...' });
   };
   const key = (k) => k.key === 'Enter' && go();
@@ -40,22 +62,23 @@ function Login() {
       <div className="flex flex-col items-center justify-center p-6 gap-4">
         <div className="md:hidden text-5xl">⚙️</div>
         <div className="w-full max-w-sm bg-white rounded shadow p-8 space-y-4">
-          <div><h2 className="text-2xl font-bold">{up ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h2>
-            <p className="text-sm text-slate-500">{up ? 'สร้างบัญชีใหม่ (เริ่มต้นเป็นช่างเทคนิค)' : 'ยินดีต้อนรับกลับมา'}</p></div>
+          <div><h2 className="text-2xl font-bold">{rs ? 'ลืมรหัสผ่าน' : up ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h2>
+            <p className="text-sm text-slate-500">{rs ? 'กรอกอีเมล เราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ให้' : up ? 'สร้างบัญชีใหม่ (เริ่มต้นเป็นช่างเทคนิค)' : 'ยินดีต้อนรับกลับมา'}</p></div>
           <label className="block text-sm font-medium">อีเมล<input className={inp + ' mt-1'} type="email" placeholder="you@example.com" value={e} onChange={(x) => setE(x.target.value)} onKeyDown={key} /></label>
-          <label className="block text-sm font-medium">รหัสผ่าน
+          {!rs && <label className="block text-sm font-medium">รหัสผ่าน
             <div className="relative mt-1"><input className={inp} type={show ? 'text' : 'password'} placeholder="อย่างน้อย 6 ตัวอักษร" value={p} onChange={(x) => setP(x.target.value)} onKeyDown={key} />
-              <button type="button" className="absolute right-3 top-2 text-xs text-slate-500" onClick={() => setShow(!show)}>{show ? 'ซ่อน' : 'แสดง'}</button></div></label>
+              <button type="button" className="absolute right-3 top-2 text-xs text-slate-500" onClick={() => setShow(!show)}>{show ? 'ซ่อน' : 'แสดง'}</button></div></label>}
+          {mode === 'in' && <div className="text-right -mt-2"><button className="text-sm text-blue-600" onClick={() => { setMode('reset'); setM(null); }}>ลืมรหัสผ่าน?</button></div>}
           {up && <label className="block text-sm font-medium">ยืนยันรหัสผ่าน<input className={inp + ' mt-1'} type={show ? 'text' : 'password'} value={p2} onChange={(x) => setP2(x.target.value)} onKeyDown={key} /></label>}
           {m && <p className={`text-sm rounded px-3 py-2 ${m.t === 'err' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{m.s}</p>}
-          <button className={btn + ' w-full'} disabled={busy} onClick={go}>{busy ? 'กำลังดำเนินการ...' : up ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
-          <p className="text-sm text-center text-slate-500">{up ? 'มีบัญชีแล้ว?' : 'ยังไม่มีบัญชี?'}{' '}
-            <button className="text-blue-600 font-medium" onClick={() => { setMode(up ? 'in' : 'up'); setM(null); }}>{up ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</button></p>
+          <button className={btn + ' w-full'} disabled={busy} onClick={go}>{busy ? 'กำลังดำเนินการ...' : rs ? 'ส่งลิงก์ตั้งรหัสผ่านใหม่' : up ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
+          <p className="text-sm text-center text-slate-500">{rs ? '' : up ? 'มีบัญชีแล้ว?' : 'ยังไม่มีบัญชี?'}{' '}
+            <button className="text-blue-600 font-medium" onClick={() => { setMode(rs || up ? 'in' : 'up'); setM(null); }}>{rs ? '← กลับไปเข้าสู่ระบบ' : up ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</button></p>
         </div>
       </div>
     </div>);
 }
- 
+
 const SC = { Open: '#dc2626', 'In Progress': '#d97706', Closed: '#16a34a', Planned: '#2563eb', 'Waiting Part': '#ea580c', Done: '#16a34a' };
 function Rows({ t, e }) {
   const mx = Math.max(1, ...e.map((x) => x[1]));
@@ -67,7 +90,7 @@ function Rows({ t, e }) {
     ) : <p className="text-sm text-slate-500">ไม่มีข้อมูล</p>}
     <div className="flex gap-2 mt-1">{e.map(([k]) => <span key={k} className="flex-1 min-w-0 text-center text-xs text-slate-500 truncate" title={k}>{k}</span>)}</div></div>);
 }
- 
+
 function History({ m, onClose }) {
   const [a, setA] = useState([]), [x, setX] = useState([]);
   useEffect(() => { (async () => {
@@ -82,7 +105,7 @@ function History({ m, onClose }) {
     {x.map((r) => <div key={r.id} className="text-sm border-b py-1">{r.maint_date} | {r.maintenance_type} | {r.problem} | {r.technician} | {r.status}</div>)}
     <button className={btn} onClick={onClose}>Close</button></div></div>);
 }
- 
+
 function Users({ me }) {
   const [rows, setRows] = useState([]), [q, setQ] = useState(''), [msg, setMsg] = useState('');
   const load = useCallback(async () => { const { data } = await supabase.from('profiles').select('*').order('full_name'); setRows(data || []); }, []);
@@ -110,7 +133,7 @@ function Users({ me }) {
     {msg && <div className="fixed bottom-4 right-4 z-30 bg-green-600 text-white px-4 py-2 rounded shadow">{msg}</div>}
   </div>);
 }
- 
+
 function Audit() {
   const [r, setR] = useState([]);
   useEffect(() => { supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(100).then(({ data }) => setR(data || [])); }, []);
@@ -121,7 +144,7 @@ function Audit() {
       <td className="p-2">{JSON.stringify(x.detail).slice(0, 90)}</td></tr>))}
       {!r.length && <tr><td className="p-4 text-slate-500" colSpan={5}>ยังไม่มีบันทึก</td></tr>}</tbody></table></div>);
 }
- 
+
 function Dash() {
   const [d, setD] = useState(null);
   useEffect(() => { (async () => {
@@ -146,7 +169,7 @@ function Dash() {
     </div>
   </div>);
 }
- 
+
 function Crud({ table, select = '*', fields, statuses, role, add, edit, del, refs = [], defaults = {}, extra }) {
   const [rows, setRows] = useState([]), [q, setQ] = useState(''), [st, setSt] = useState('');
   const [form, setForm] = useState(null), [err, setErr] = useState(''), [df, setDf] = useState(''), [dt, setDt] = useState(''), [ok, setOk] = useState('');
@@ -211,12 +234,13 @@ function Crud({ table, select = '*', fields, statuses, role, add, edit, del, ref
         <button className="px-3 py-1 border rounded text-sm" onClick={() => { setForm(null); setErr(''); }}>Cancel</button></div></div></div>)}
   </div>);
 }
- 
+
 export default function Home() {
-  const [ses, setSes] = useState(undefined), [prof, setProf] = useState(null), [tab, setTab] = useState('Dashboard'), [machines, setMachines] = useState([]), [hist, setHist] = useState(null), [openN, setOpenN] = useState(0), [dark, setDark] = useState(false);
+  const [ses, setSes] = useState(undefined), [prof, setProf] = useState(null), [tab, setTab] = useState('Dashboard'), [machines, setMachines] = useState([]), [hist, setHist] = useState(null), [openN, setOpenN] = useState(0), [dark, setDark] = useState(false), [rec, setRec] = useState(false);
   useEffect(() => {
+    if (window.location.href.includes('type=recovery')) setRec(true);
     supabase.auth.getSession().then(({ data }) => setSes(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSes(s));
+    const { data } = supabase.auth.onAuthStateChange((ev, s) => { setSes(s); if (ev === 'PASSWORD_RECOVERY') setRec(true); });
     return () => data.subscription.unsubscribe();
   }, []);
   useEffect(() => {
@@ -228,6 +252,7 @@ export default function Home() {
   useEffect(() => { try { const d = localStorage.getItem('dark') === '1'; setDark(d); document.documentElement.classList.toggle('dark', d); } catch (e) {} }, []);
   const flip = () => { const d = !dark; setDark(d); document.documentElement.classList.toggle('dark', d); try { localStorage.setItem('dark', d ? '1' : '0'); } catch (e) {} };
   if (ses === undefined) return <p className="p-6">Loading...</p>;
+  if (rec && ses) return <NewPassword onDone={() => { setRec(false); window.history.replaceState(null, '', window.location.pathname); }} />;
   if (!ses) return <Login />;
   const role = prof?.role || 'viewer', admin = role === 'admin', tech = role !== 'viewer';
   const mref = { k: 'machine_ref', label: 'Machine', type: 'ref', req: true, adminOnly: true, show: 1 };
