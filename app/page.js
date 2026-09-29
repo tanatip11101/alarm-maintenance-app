@@ -1,41 +1,73 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-
+ 
 const MS = ['Running', 'Stop', 'Alarm', 'Maintenance'];
 const AS = ['Open', 'In Progress', 'Closed'];
 const XS = ['Planned', 'In Progress', 'Waiting Part', 'Done'];
-const inp = 'border rounded px-2 py-1 w-full';
-const btn = 'px-3 py-1 rounded bg-slate-800 text-white text-sm';
-
+const inp = 'border rounded px-3 py-2 w-full';
+const btn = 'px-4 py-2 rounded bg-slate-800 text-white text-sm font-medium';
+const TONE = { Running: 'green', Stop: 'gray', Alarm: 'red', Maintenance: 'amber', Open: 'red', 'In Progress': 'amber', Closed: 'green', Planned: 'blue', 'Waiting Part': 'orange', Done: 'green', admin: 'blue', technician: 'green', viewer: 'gray' };
+const COL = { Running: '#16a34a', Stop: '#64748b', Alarm: '#dc2626', Maintenance: '#d97706' };
+const Badge = ({ s }) => <span className={`badge b-${TONE[s] || 'gray'}`}>{s}</span>;
+ 
 function Login() {
-  const [e, setE] = useState(''), [p, setP] = useState(''), [m, setM] = useState('');
-  const go = async (up) => {
-    setM('');
-    if (!e || !p) return setM('กรุณากรอกอีเมลและรหัสผ่าน');
-    if (p.length < 6) return setM('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+  const [mode, setMode] = useState('in'), [e, setE] = useState(''), [p, setP] = useState(''), [p2, setP2] = useState('');
+  const [show, setShow] = useState(false), [busy, setBusy] = useState(false), [m, setM] = useState(null);
+  const up = mode === 'up';
+  const go = async () => {
+    setM(null);
+    if (!e || !p) return setM({ t: 'err', s: 'กรุณากรอกอีเมลและรหัสผ่าน' });
+    if (!/^\S+@\S+\.\S+$/.test(e)) return setM({ t: 'err', s: 'รูปแบบอีเมลไม่ถูกต้อง' });
+    if (up && p.length < 6) return setM({ t: 'err', s: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
+    if (up && p !== p2) return setM({ t: 'err', s: 'รหัสผ่านสองช่องไม่ตรงกัน' });
+    setBusy(true);
     const a = { email: e, password: p };
     const { error } = up ? await supabase.auth.signUp(a) : await supabase.auth.signInWithPassword(a);
-    setM(error ? error.message : up ? 'สมัครสำเร็จ (ถ้าเปิด confirm email ให้ยืนยันอีเมลก่อน)' : '');
+    setBusy(false);
+    if (error) setM({ t: 'err', s: error.message.includes('Invalid login') ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' : error.message });
+    else if (up) setM({ t: 'ok', s: 'สมัครสำเร็จ กำลังเข้าสู่ระบบ...' });
   };
+  const key = (k) => k.key === 'Enter' && go();
   return (
-    <div className="max-w-sm mx-auto mt-24 p-6 bg-white rounded shadow space-y-3">
-      <h1 className="text-xl font-bold">Alarm & Maintenance</h1>
-      <input className={inp} placeholder="Email" value={e} onChange={(x) => setE(x.target.value)} />
-      <input className={inp} type="password" placeholder="Password" value={p} onChange={(x) => setP(x.target.value)} />
-      {m && <p className="text-sm text-red-600">{m}</p>}
-      <div className="flex gap-2"><button className={btn} onClick={() => go(false)}>Login</button>
-        <button className="px-3 py-1 rounded border text-sm" onClick={() => go(true)}>Sign up</button></div>
+    <div className="min-h-screen grid md:grid-cols-2">
+      <div className="hidden md:flex flex-col justify-center p-12 text-white login-hero">
+        <div className="text-5xl mb-4">⚙️</div>
+        <h1 className="text-3xl font-bold mb-2">Alarm & Maintenance</h1>
+        <p className="opacity-90 mb-8">ระบบจัดการ Alarm และงานซ่อมบำรุงเครื่องจักรในโรงงาน</p>
+        {['ติดตามสถานะเครื่องจักรได้ในหน้าเดียว', 'บันทึกและปิดงาน Alarm ได้ทันที', 'ประวัติงานซ่อมบำรุงครบทุกเครื่อง', 'ควบคุมสิทธิ์ตามบทบาทผู้ใช้'].map((x) => <div key={x} className="mb-2">✓ {x}</div>)}
+      </div>
+      <div className="flex flex-col items-center justify-center p-6 gap-4">
+        <div className="md:hidden text-5xl">⚙️</div>
+        <div className="w-full max-w-sm bg-white rounded shadow p-8 space-y-4">
+          <div><h2 className="text-2xl font-bold">{up ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h2>
+            <p className="text-sm text-slate-500">{up ? 'สร้างบัญชีใหม่ (เริ่มต้นเป็นช่างเทคนิค)' : 'ยินดีต้อนรับกลับมา'}</p></div>
+          <label className="block text-sm font-medium">อีเมล<input className={inp + ' mt-1'} type="email" placeholder="you@example.com" value={e} onChange={(x) => setE(x.target.value)} onKeyDown={key} /></label>
+          <label className="block text-sm font-medium">รหัสผ่าน
+            <div className="relative mt-1"><input className={inp} type={show ? 'text' : 'password'} placeholder="อย่างน้อย 6 ตัวอักษร" value={p} onChange={(x) => setP(x.target.value)} onKeyDown={key} />
+              <button type="button" className="absolute right-3 top-2 text-xs text-slate-500" onClick={() => setShow(!show)}>{show ? 'ซ่อน' : 'แสดง'}</button></div></label>
+          {up && <label className="block text-sm font-medium">ยืนยันรหัสผ่าน<input className={inp + ' mt-1'} type={show ? 'text' : 'password'} value={p2} onChange={(x) => setP2(x.target.value)} onKeyDown={key} /></label>}
+          {m && <p className={`text-sm rounded px-3 py-2 ${m.t === 'err' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{m.s}</p>}
+          <button className={btn + ' w-full'} disabled={busy} onClick={go}>{busy ? 'กำลังดำเนินการ...' : up ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
+          <p className="text-sm text-center text-slate-500">{up ? 'มีบัญชีแล้ว?' : 'ยังไม่มีบัญชี?'}{' '}
+            <button className="text-blue-600 font-medium" onClick={() => { setMode(up ? 'in' : 'up'); setM(null); }}>{up ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</button></p>
+        </div>
+      </div>
     </div>);
 }
-
+ 
+const SC = { Open: '#dc2626', 'In Progress': '#d97706', Closed: '#16a34a', Planned: '#2563eb', 'Waiting Part': '#ea580c', Done: '#16a34a' };
 function Rows({ t, e }) {
   const mx = Math.max(1, ...e.map((x) => x[1]));
-  return (<div className="bg-white rounded p-4 shadow"><h3 className="font-semibold mb-2">{t}</h3>
-    {e.length ? e.map(([k, v]) => (<div key={k} className="flex items-center gap-2 text-sm mb-1"><span className="w-24 truncate">{k}</span>
-      <div className="bg-slate-800 h-3 rounded" style={{ width: `${(v / mx) * 100}px` }} /><span>{v}</span></div>)) : <p className="text-sm text-slate-500">ไม่มีข้อมูล</p>}</div>);
+  return (<div className="bg-white rounded p-4 shadow"><h3 className="font-semibold mb-3">{t}</h3>
+    {e.some((x) => x[1] > 0) ? (<div className="flex items-end gap-2 h-44 border-b">
+      {e.map(([k, v]) => (<div key={k} className="flex-1 min-w-0 h-full flex flex-col justify-end items-center gap-1">
+        <span className="text-xs font-semibold">{v}</span>
+        <div className="w-full rounded-t vbar" style={{ maxWidth: 44, height: `${(v / mx) * 85}%`, minHeight: v ? 4 : 0, background: SC[k] || COL[k] || 'var(--brand)' }} /></div>))}</div>
+    ) : <p className="text-sm text-slate-500">ไม่มีข้อมูล</p>}
+    <div className="flex gap-2 mt-1">{e.map(([k]) => <span key={k} className="flex-1 min-w-0 text-center text-xs text-slate-500 truncate" title={k}>{k}</span>)}</div></div>);
 }
-
+ 
 function History({ m, onClose }) {
   const [a, setA] = useState([]), [x, setX] = useState([]);
   useEffect(() => { (async () => {
@@ -50,7 +82,35 @@ function History({ m, onClose }) {
     {x.map((r) => <div key={r.id} className="text-sm border-b py-1">{r.maint_date} | {r.maintenance_type} | {r.problem} | {r.technician} | {r.status}</div>)}
     <button className={btn} onClick={onClose}>Close</button></div></div>);
 }
-
+ 
+function Users({ me }) {
+  const [rows, setRows] = useState([]), [q, setQ] = useState(''), [msg, setMsg] = useState('');
+  const load = useCallback(async () => { const { data } = await supabase.from('profiles').select('*').order('full_name'); setRows(data || []); }, []);
+  useEffect(() => { load(); }, [load]);
+  const save = async (u, patch) => {
+    const { error } = await supabase.from('profiles').update(patch).eq('id', u.id);
+    setMsg(error ? error.message : 'บันทึกแล้ว'); setTimeout(() => setMsg(''), 2000); load();
+  };
+  const view = rows.filter((u) => !q || `${u.full_name} ${u.role}`.toLowerCase().includes(q.toLowerCase()));
+  const C = { admin: '#2563eb', technician: '#16a34a', viewer: '#64748b' };
+  return (<div className="space-y-3">
+    <div className="grid grid-cols-3 gap-3">{Object.keys(C).map((r) => (<div key={r} className="bg-white rounded p-4 shadow stat" style={{ '--c': C[r] }}>
+      <div className="text-3xl font-bold">{rows.filter((u) => u.role === r).length}</div><div className="text-sm text-slate-500">{r}</div></div>))}</div>
+    <div className="flex flex-wrap gap-2 items-center"><input className="border rounded px-3 py-2" placeholder="ค้นหาผู้ใช้..." value={q} onChange={(e) => setQ(e.target.value)} />
+      <span className="text-sm text-slate-500">ผู้ใช้ใหม่สมัครเองที่หน้า Login แล้วกำหนดบทบาทที่นี่</span></div>
+    <div className="bg-white rounded shadow overflow-x-auto"><table className="w-full text-sm">
+      <thead className="bg-slate-200"><tr><th className="p-2 text-left">ผู้ใช้</th><th className="p-2 text-left">ชื่อที่แสดง</th><th className="p-2 text-left">บทบาท</th></tr></thead>
+      <tbody>{view.map((u) => (<tr key={u.id} className="border-t">
+        <td className="p-2"><span className="avatar mr-2">{(u.full_name || '?')[0].toUpperCase()}</span>{u.full_name}{u.id === me.id && <span className="badge b-blue ml-2">คุณ</span>}</td>
+        <td className="p-2"><input key={u.full_name} className="border rounded px-2 py-1" defaultValue={u.full_name || ''} onBlur={(e) => e.target.value.trim() && e.target.value !== u.full_name && save(u, { full_name: e.target.value.trim() })} /></td>
+        <td className="p-2"><select className="border rounded px-2 py-1" value={u.role} disabled={u.id === me.id} title={u.id === me.id ? 'ไม่สามารถเปลี่ยนบทบาทของตัวเองได้' : ''}
+          onChange={(e) => confirm(`เปลี่ยนบทบาทของ ${u.full_name} เป็น ${e.target.value}?`) && save(u, { role: e.target.value })}>
+          {['admin', 'technician', 'viewer'].map((r) => <option key={r}>{r}</option>)}</select></td></tr>))}
+        {!view.length && <tr><td className="p-4 text-slate-500" colSpan={3}>ไม่พบผู้ใช้</td></tr>}</tbody></table></div>
+    {msg && <div className="fixed bottom-4 right-4 z-30 bg-green-600 text-white px-4 py-2 rounded shadow">{msg}</div>}
+  </div>);
+}
+ 
 function Audit() {
   const [r, setR] = useState([]);
   useEffect(() => { supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(100).then(({ data }) => setR(data || [])); }, []);
@@ -61,7 +121,7 @@ function Audit() {
       <td className="p-2">{JSON.stringify(x.detail).slice(0, 90)}</td></tr>))}
       {!r.length && <tr><td className="p-4 text-slate-500" colSpan={5}>ยังไม่มีบันทึก</td></tr>}</tbody></table></div>);
 }
-
+ 
 function Dash() {
   const [d, setD] = useState(null);
   useEffect(() => { (async () => {
@@ -70,28 +130,26 @@ function Dash() {
   })(); }, []);
   if (!d) return <p>Loading...</p>;
   const c = (a, s) => a.filter((r) => r.status === s).length;
-  const Card = ({ t, n }) => (<div className="bg-white rounded p-4 shadow"><div className="text-3xl font-bold">{n}</div><div className="text-sm text-slate-500">{t}</div></div>);
-  const Bars = ({ t, arr, keys }) => (<div className="bg-white rounded p-4 shadow"><h3 className="font-semibold mb-2">{t}</h3>
-    {keys.map((k) => (<div key={k} className="flex items-center gap-2 text-sm mb-1"><span className="w-24">{k}</span>
-      <div className="bg-slate-800 h-3 rounded" style={{ width: `${c(arr, k) * 20 + 2}px` }} /><span>{c(arr, k)}</span></div>))}</div>);
+  const Card = ({ t, n, c = '#64748b' }) => (<div className="bg-white rounded p-4 shadow stat" style={{ '--c': c }}><div className="text-3xl font-bold">{n}</div><div className="text-sm text-slate-500">{t}</div></div>);
+  const Bars = ({ t, arr, keys }) => <Rows t={t} e={keys.map((k) => [k, c(arr, k)])} />;
   return (<div className="space-y-4">
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <Card t="Total machines" n={d[0].length} />
-      {MS.map((s) => <Card key={s} t={s} n={c(d[0], s)} />)}
-      <Card t="Alarms" n={d[1].length} /><Card t="Open alarms" n={c(d[1], 'Open')} />
-      <Card t="Maintenance jobs" n={d[2].length} />
+      <Card t="Total machines" n={d[0].length} c="#2563eb" />
+      {MS.map((s) => <Card key={s} t={s} n={c(d[0], s)} c={COL[s]} />)}
+      <Card t="Alarms" n={d[1].length} c="#dc2626" /><Card t="Open alarms" n={c(d[1], 'Open')} c="#dc2626" />
+      <Card t="Maintenance jobs" n={d[2].length} c="#2563eb" />
     </div>
-    <div className="grid md:grid-cols-2 gap-3"><Bars t="Alarms by status" arr={d[1]} keys={AS} /><Bars t="Maintenance by status" arr={d[2]} keys={XS} /></div>
+    <div className="grid md:grid-cols-3 gap-3"><Bars t="Machines by status" arr={d[0]} keys={MS} /><Bars t="Alarms by status" arr={d[1]} keys={AS} /><Bars t="Maintenance by status" arr={d[2]} keys={XS} /></div>
     <div className="grid md:grid-cols-2 gap-3">
       <Rows t="Alarms by machine" e={Object.entries(d[1].reduce((o, a) => { const k = a.machines?.machine_id || '?'; o[k] = (o[k] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6)} />
       <Rows t="Alarms last 7 days" e={[...Array(7)].map((_, i) => { const t = new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10); return [t.slice(5), d[1].filter((a) => (a.occurred_at || '').slice(0, 10) === t).length]; })} />
     </div>
   </div>);
 }
-
+ 
 function Crud({ table, select = '*', fields, statuses, role, add, edit, del, refs = [], defaults = {}, extra }) {
   const [rows, setRows] = useState([]), [q, setQ] = useState(''), [st, setSt] = useState('');
-  const [form, setForm] = useState(null), [err, setErr] = useState(''), [df, setDf] = useState(''), [dt, setDt] = useState('');
+  const [form, setForm] = useState(null), [err, setErr] = useState(''), [df, setDf] = useState(''), [dt, setDt] = useState(''), [ok, setOk] = useState('');
   const load = useCallback(async () => {
     const { data } = await supabase.from(table).select(select).order('created_at', { ascending: false });
     setRows(data || []);
@@ -111,7 +169,7 @@ function Crud({ table, select = '*', fields, statuses, role, add, edit, del, ref
     Object.keys(body).forEach((k) => { if (body[k] === '') body[k] = null; });
     const { error } = id ? await supabase.from(table).update(body).eq('id', id) : await supabase.from(table).insert(body);
     if (error) return setErr(error.code === '23505' ? 'Machine ID ซ้ำ ไม่สามารถบันทึกได้' : error.message);
-    setForm(null); setErr(''); load();
+    setForm(null); setErr(''); load(); setOk('บันทึกสำเร็จ'); setTimeout(() => setOk(''), 2000);
   };
   const csv = () => {
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -120,7 +178,7 @@ function Crud({ table, select = '*', fields, statuses, role, add, edit, del, ref
     a.href = URL.createObjectURL(new Blob(['\ufeff' + t], { type: 'text/csv' }));
     a.download = `${table}.csv`; a.click();
   };
-  const remove = async (id) => { if (confirm('ยืนยันการลบ?')) { await supabase.from(table).delete().eq('id', id); load(); } };
+  const remove = async (id) => { if (confirm('ยืนยันการลบ?')) { await supabase.from(table).delete().eq('id', id); load(); setOk('ลบข้อมูลแล้ว'); setTimeout(() => setOk(''), 2000); } };
   const input = (f) => {
     const dis = !!form.id && f.adminOnly && role !== 'admin';
     const on = (x) => setForm({ ...form, [f.k]: x.target.value });
@@ -135,23 +193,25 @@ function Crud({ table, select = '*', fields, statuses, role, add, edit, del, ref
       <input type="date" className="border rounded px-2 py-1" title="From" value={df} onChange={(e) => setDf(e.target.value)} />
       <input type="date" className="border rounded px-2 py-1" title="To" value={dt} onChange={(e) => setDt(e.target.value)} />
       <button className="px-3 py-1 rounded border text-sm bg-white" onClick={csv}>Export CSV</button>
-      {add && <button className={btn} onClick={() => setForm({ ...defaults })}>+ Add</button>}
+      <span className="text-sm text-slate-500 self-center ml-auto">{view.length} รายการ</span>
+      {add && <button className={btn} onClick={() => setForm({ ...defaults })}>+ เพิ่มข้อมูล</button>}
     </div>
     <div className="bg-white rounded shadow overflow-x-auto"><table className="w-full text-sm">
       <thead className="bg-slate-200"><tr>{fields.map((f) => <th key={f.k} className="p-2 text-left">{f.label}</th>)}<th /></tr></thead>
       <tbody>{view.map((r) => (<tr key={r.id} className="border-t">
-        {fields.map((f) => <td key={f.k} className="p-2">{String(val(r, f) ?? '')}</td>)}
+        {fields.map((f) => <td key={f.k} className="p-2">{f.k === 'status' ? <Badge s={r.status} /> : String(val(r, f) ?? '')}</td>)}
         <td className="p-2 whitespace-nowrap">{extra && extra(r)}{edit && <button className="mr-2 underline" onClick={() => setForm(r)}>Edit</button>}
           {del && <button className="text-red-600 underline" onClick={() => remove(r.id)}>Delete</button>}</td></tr>))}
         {!view.length && <tr><td className="p-4 text-slate-500" colSpan={fields.length + 1}>ไม่พบข้อมูล</td></tr>}</tbody></table></div>
-    {form && (<div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded p-5 w-full max-w-md space-y-2 max-h-full overflow-auto">
-      {fields.map((f) => (<label key={f.k} className="block text-sm">{f.label}{f.req && ' *'}{input(f)}</label>))}
+    {ok && <div className="fixed bottom-4 right-4 z-30 bg-green-600 text-white px-4 py-2 rounded shadow">{ok}</div>}
+    {form && (<div className="fixed inset-0 z-20 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded p-6 w-full max-w-md space-y-2 max-h-full overflow-auto"><h2 className="font-bold text-lg">{form.id ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'}</h2>
+      {fields.map((f) => (<label key={f.k} className="block text-sm font-medium mt-2">{f.label}{f.req && ' *'}{input(f)}</label>))}
       {err && <p className="text-sm text-red-600">{err}</p>}
       <div className="flex gap-2 pt-2"><button className={btn} onClick={save}>Save</button>
         <button className="px-3 py-1 border rounded text-sm" onClick={() => { setForm(null); setErr(''); }}>Cancel</button></div></div></div>)}
   </div>);
 }
-
+ 
 export default function Home() {
   const [ses, setSes] = useState(undefined), [prof, setProf] = useState(null), [tab, setTab] = useState('Dashboard'), [machines, setMachines] = useState([]), [hist, setHist] = useState(null), [openN, setOpenN] = useState(0), [dark, setDark] = useState(false);
   useEffect(() => {
@@ -194,11 +254,11 @@ export default function Home() {
     Maintenance: <Crud key="x" table="maintenance_records" select="*, machines(machine_id)" fields={F.Maintenance} statuses={XS} role={role} refs={machines} add={tech} edit={tech} del={admin} defaults={{ status: 'Planned', technician: prof?.full_name || '', maint_date: now.slice(0, 10) }} />,
   };
   return (<div className="max-w-6xl mx-auto p-4 space-y-4">
-    <header className="flex flex-wrap items-center gap-2 justify-between">
-      <nav className="flex flex-wrap gap-1">{[...Object.keys(body), ...(admin ? ['Audit'] : [])].map((t) => (<button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded text-sm ${tab === t ? 'bg-slate-800 text-white' : 'bg-white'}`}>{t}</button>))}</nav>
+    <header className="flex flex-wrap items-center gap-3 justify-between"><div className="font-bold text-lg">⚙️ Alarm & Maintenance</div>
+      <nav className="flex flex-wrap gap-1">{[...Object.keys(body), ...(admin ? ['Users', 'Audit'] : [])].map((t) => (<button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded text-sm font-medium ${tab === t ? 'bg-slate-800 text-white' : 'bg-white'}`}>{t}</button>))}</nav>
       <div className="text-sm">{ses.user.email} <span className="px-2 py-0.5 rounded bg-slate-200">{role}</span> <button className="underline ml-2" onClick={flip}>{dark ? 'Light' : 'Dark'}</button> <button className="underline ml-2" onClick={() => supabase.auth.signOut()}>Logout</button></div>
     </header>
     {openN > 0 && <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-sm">แจ้งเตือน: มี Alarm ที่ยังเปิดอยู่ {openN} รายการ</div>}
-    {tab === 'Audit' ? <Audit /> : body[tab]}
+    {tab === 'Audit' ? <Audit /> : tab === 'Users' ? <Users me={ses.user} /> : body[tab]}
     {hist && <History m={hist} onClose={() => setHist(null)} />}</div>);
 }
