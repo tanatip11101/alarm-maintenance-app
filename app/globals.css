@@ -39,4 +39,9 @@ td button.text-red-600{font-weight:500}
 button:disabled{opacity:.6;cursor:not-allowed}
 .vbar{transition:height .4s ease}
 .vbar:hover{opacity:.85}
-html.dark body{background:var(--bg);color:var(--text)}
+.side{background:var(--card);border-right:1px solid var(--line)}
+.nav-i{display:flex;align-items:center;gap:.65rem;width:100%;padding:.65rem .9rem;border-radius:10px;font-size:14px;font-weight:500;color:var(--text);text-align:left}
+.nav-i:hover{background:var(--head)}
+.nav-i.on{background:var(--brand);color:#fff}
+.side-btn{flex:1;padding:.45rem;border:1px solid var(--line);border-radius:10px;font-size:13px}
+.side-btn:hover{background:var(--head)}
