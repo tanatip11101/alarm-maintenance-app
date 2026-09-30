@@ -97,7 +97,7 @@ function History({ m, onClose }) {
     setA((await supabase.from('alarms').select('*').eq('machine_ref', m.id).order('occurred_at', { ascending: false })).data || []);
     setX((await supabase.from('maintenance_records').select('*').eq('machine_ref', m.id).order('maint_date', { ascending: false })).data || []);
   })(); }, [m.id]);
-  return (<div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded p-5 w-full max-w-2xl max-h-full overflow-auto space-y-2">
+  return (<div className="fixed inset-0 z-20 bg-black/40 flex items-center justify-center p-4"><div className="bg-white rounded p-5 w-full max-w-2xl max-h-full overflow-auto space-y-2">
     <h2 className="font-bold">History: {m.machine_id} - {m.name}</h2>
     <h3 className="font-semibold text-sm">Alarms ({a.length})</h3>
     {a.map((r) => <div key={r.id} className="text-sm border-b py-1">{(r.occurred_at || '').slice(0, 16).replace('T', ' ')} | {r.alarm_code} | {r.description} | {r.status}</div>)}
@@ -236,7 +236,7 @@ function Crud({ table, select = '*', fields, statuses, role, add, edit, del, ref
 }
 
 export default function Home() {
-  const [ses, setSes] = useState(undefined), [prof, setProf] = useState(null), [tab, setTab] = useState('Dashboard'), [machines, setMachines] = useState([]), [hist, setHist] = useState(null), [openN, setOpenN] = useState(0), [dark, setDark] = useState(false), [rec, setRec] = useState(false);
+  const [ses, setSes] = useState(undefined), [prof, setProf] = useState(null), [tab, setTab] = useState('Dashboard'), [machines, setMachines] = useState([]), [hist, setHist] = useState(null), [openN, setOpenN] = useState(0), [dark, setDark] = useState(false), [rec, setRec] = useState(false), [menu, setMenu] = useState(false);
   useEffect(() => {
     if (window.location.href.includes('type=recovery')) setRec(true);
     supabase.auth.getSession().then(({ data }) => setSes(data.session));
@@ -278,12 +278,27 @@ export default function Home() {
     Alarms: <Crud key="a" table="alarms" select="*, machines(machine_id)" fields={F.Alarms} statuses={AS} role={role} refs={machines} add={admin} edit={tech} del={admin} defaults={{ status: 'Open', occurred_at: now }} />,
     Maintenance: <Crud key="x" table="maintenance_records" select="*, machines(machine_id)" fields={F.Maintenance} statuses={XS} role={role} refs={machines} add={tech} edit={tech} del={admin} defaults={{ status: 'Planned', technician: prof?.full_name || '', maint_date: now.slice(0, 10) }} />,
   };
-  return (<div className="max-w-6xl mx-auto p-4 space-y-4">
-    <header className="flex flex-wrap items-center gap-3 justify-between"><div className="font-bold text-lg">⚙️ Alarm & Maintenance</div>
-      <nav className="flex flex-wrap gap-1">{[...Object.keys(body), ...(admin ? ['Users', 'Audit'] : [])].map((t) => (<button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded text-sm font-medium ${tab === t ? 'bg-slate-800 text-white' : 'bg-white'}`}>{t}</button>))}</nav>
-      <div className="text-sm">{ses.user.email} <span className="px-2 py-0.5 rounded bg-slate-200">{role}</span> <button className="underline ml-2" onClick={flip}>{dark ? 'Light' : 'Dark'}</button> <button className="underline ml-2" onClick={() => supabase.auth.signOut()}>Logout</button></div>
-    </header>
-    {openN > 0 && <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-sm">แจ้งเตือน: มี Alarm ที่ยังเปิดอยู่ {openN} รายการ</div>}
-    {tab === 'Audit' ? <Audit /> : tab === 'Users' ? <Users me={ses.user} /> : body[tab]}
-    {hist && <History m={hist} onClose={() => setHist(null)} />}</div>);
+  const items = [['Dashboard', '📊', 'แดชบอร์ด'], ['Machines', '🏭', 'เครื่องจักร'], ['Alarms', '🚨', 'Alarm'], ['Maintenance', '🛠️', 'งานซ่อมบำรุง'], ...(admin ? [['Users', '👥', 'จัดการผู้ใช้'], ['Audit', '📜', 'Audit Log']] : [])];
+  const cur = items.find((x) => x[0] === tab) || items[0];
+  const pick = (t) => { setTab(t); setMenu(false); };
+  return (<div className="min-h-screen md:flex">
+    {menu && <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setMenu(false)} />}
+    <aside className={`side fixed md:sticky top-0 z-40 md:z-10 h-screen w-64 shrink-0 flex flex-col p-4 transition-transform ${menu ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+      <div className="font-bold text-lg mb-6 px-2">⚙️ Alarm & Maintenance</div>
+      <nav className="flex-1 space-y-1 overflow-y-auto">{items.map(([k, ic, lb]) => (
+        <button key={k} onClick={() => pick(k)} className={`nav-i ${tab === k ? 'on' : ''}`}><span>{ic}</span>{lb}{k === 'Alarms' && openN > 0 && <span className="badge b-red ml-auto">{openN}</span>}</button>))}</nav>
+      <div className="border-t pt-3 space-y-3 text-sm">
+        <div className="flex items-center gap-2"><span className="avatar">{(ses.user.email || '?')[0].toUpperCase()}</span>
+          <div className="min-w-0"><div className="truncate">{ses.user.email}</div><span className="badge b-blue">{role}</span></div></div>
+        <div className="flex gap-2"><button className="side-btn" onClick={flip}>{dark ? '☀️ Light' : '🌙 Dark'}</button>
+          <button className="side-btn" onClick={() => supabase.auth.signOut()}>Logout</button></div>
+      </div>
+    </aside>
+    <main className="flex-1 min-w-0 max-w-6xl p-4 md:p-6 space-y-4">
+      <div className="flex items-center gap-3"><button className="md:hidden px-3 py-2 rounded bg-white border" onClick={() => setMenu(true)}>☰</button>
+        <h1 className="text-2xl font-bold">{cur[1]} {cur[2]}</h1></div>
+      {openN > 0 && <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-sm">แจ้งเตือน: มี Alarm ที่ยังเปิดอยู่ {openN} รายการ</div>}
+      {tab === 'Audit' ? <Audit /> : tab === 'Users' ? <Users me={ses.user} /> : body[tab]}
+      {hist && <History m={hist} onClose={() => setHist(null)} />}
+    </main></div>);
 }
