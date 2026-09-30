@@ -134,14 +134,26 @@ function Users({ me }) {
   </div>);
 }
 
+const TL = { machines: 'เครื่องจักร', alarms: 'Alarm', maintenance_records: 'งานซ่อมบำรุง' };
+const AC = { INSERT: ['เพิ่ม', 'green'], UPDATE: ['แก้ไข', 'amber'], DELETE: ['ลบ', 'red'] };
 function Audit() {
-  const [r, setR] = useState([]);
-  useEffect(() => { supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(100).then(({ data }) => setR(data || [])); }, []);
+  const [r, setR] = useState([]), [mm, setMm] = useState({});
+  useEffect(() => { (async () => {
+    setR((await supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(100)).data || []);
+    setMm(Object.fromEntries(((await supabase.from('machines').select('id,machine_id')).data || []).map((m) => [m.id, m.machine_id])));
+  })(); }, []);
+  const sum = (x) => {
+    const d = x.detail || {}, mc = mm[d.machine_ref] || '?';
+    if (x.table_name === 'machines') return `เครื่อง ${d.machine_id} (${d.name}) · สถานะ: ${d.status}`;
+    if (x.table_name === 'alarms') return `Alarm ${d.alarm_code} ของเครื่อง ${mc}: ${d.description} · สถานะ: ${d.status}`;
+    return `${d.maintenance_type} เครื่อง ${mc}: ${d.problem} · ช่าง: ${d.technician} · สถานะ: ${d.status}`;
+  };
   return (<div className="bg-white rounded shadow overflow-x-auto"><table className="w-full text-sm">
-    <thead className="bg-slate-200"><tr>{['Time', 'User', 'Table', 'Action', 'Detail'].map((h) => <th key={h} className="p-2 text-left">{h}</th>)}</tr></thead>
-    <tbody>{r.map((x) => (<tr key={x.id} className="border-t"><td className="p-2 whitespace-nowrap">{x.created_at.slice(0, 19).replace('T', ' ')}</td>
-      <td className="p-2">{x.changed_by_email}</td><td className="p-2">{x.table_name}</td><td className="p-2">{x.action}</td>
-      <td className="p-2">{JSON.stringify(x.detail).slice(0, 90)}</td></tr>))}
+    <thead className="bg-slate-200"><tr>{['เวลา (ไทย)', 'ผู้ใช้', 'ตาราง', 'การกระทำ', 'รายละเอียด'].map((h) => <th key={h} className="p-2 text-left">{h}</th>)}</tr></thead>
+    <tbody>{r.map((x) => { const [lb, tn] = AC[x.action] || [x.action, 'gray']; return (<tr key={x.id} className="border-t">
+      <td className="p-2 whitespace-nowrap">{new Date(x.created_at).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', hour12: false })}</td>
+      <td className="p-2">{x.changed_by_email}</td><td className="p-2">{TL[x.table_name] || x.table_name}</td>
+      <td className="p-2"><span className={`badge b-${tn}`}>{lb}</span></td><td className="p-2">{sum(x)}</td></tr>); })}
       {!r.length && <tr><td className="p-4 text-slate-500" colSpan={5}>ยังไม่มีบันทึก</td></tr>}</tbody></table></div>);
 }
 
